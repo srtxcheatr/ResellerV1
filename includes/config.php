@@ -2,7 +2,7 @@
 // includes/config.php — the only place these values live. Every page
 // includes this, so changing your backend URL means editing ONE file.
 
-define('BACKEND_URL', 'https://fuckv2.onrender.com'); // ← your Node backend URL
+define('BACKEND_URL', 'https://reprov1.onrender.com'); // ← your Node backend URL
 
 define('FIREBASE_CONFIG_JSON', json_encode([
     'apiKey' => 'AIzaSyC75_Oqo4wc7Jx58wfkkoQML9YxgP24QR4',
