@@ -24,10 +24,14 @@ require __DIR__ . '/includes/nav.php';
             <div id="noticeText" style="font-size:12px;color:var(--text2)">loading...</div>
         </div>
 
+        <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+            <button class="btn btn-ghost" id="openTopup" style="font-size:12px;flex:1;min-width:100px">./topup.sh</button>
+            <button class="btn btn-ghost" id="openProfile" style="font-size:12px;flex:1;min-width:100px">./profile.sh</button>
+            <button class="btn btn-ghost" id="openKeys" style="font-size:12px;flex:1;min-width:100px">./keys.sh</button>
+        </div>
         <div style="display:flex;gap:8px;margin-bottom:16px">
-            <button class="btn btn-ghost" id="openTopup" style="font-size:12px">./topup.sh</button>
-            <button class="btn btn-ghost" id="openProfile" style="font-size:12px">./profile.sh</button>
-            <button class="btn btn-ghost" id="openKeys" style="font-size:12px">./keys.sh</button>
+            <a href="https://samratsubedi163-star.github.io/Support-/" target="_blank" class="btn btn-ghost" style="font-size:12px;flex:1;text-decoration:none">./help.sh</a>
+            <button class="btn btn-ghost" id="openPassword" style="font-size:12px;flex:1">./passwd.sh</button>
         </div>
 
         <div class="prompt-header">ls -la /catalog</div>
@@ -66,6 +70,10 @@ require __DIR__ . '/includes/nav.php';
     <div class="panel" style="max-width:400px;margin:auto">
         <div class="prompt-header">topup --esewa</div>
         <div class="dim" style="font-size:12px;margin-bottom:12px">Pay via eSewa, then submit your transaction ID. Admin verifies and credits shortly.</div>
+        <div class="qr-wrap">
+            <img src="https://i.postimg.cc/zXm07q9C/Screenshot-20260425-142906.jpg" alt="eSewa QR">
+            <div class="dim" style="text-align:center;font-size:11px;margin-top:6px">Scan with eSewa App</div>
+        </div>
         <div class="field"><label>amount (Rs)</label><input type="number" id="topupAmount" value="100" min="50"></div>
         <div class="field"><label>your eSewa ID</label><input type="text" id="topupEsewa" placeholder="phone or email"></div>
         <div class="field"><label>transaction code</label><input type="text" id="topupTx" placeholder="e.g. JRJDHD"></div>
@@ -95,6 +103,17 @@ require __DIR__ . '/includes/nav.php';
     </div>
 </div>
 
+<!-- ---- Change password modal ---- -->
+<div id="passwordModal" class="modal-overlay hidden">
+    <div class="panel" style="max-width:400px;margin:auto">
+        <div class="prompt-header">passwd --change</div>
+        <div class="field"><label>current password</label><input type="password" id="curPass" autocomplete="current-password"></div>
+        <div class="field"><label>new password (min 6 chars)</label><input type="password" id="newPass" autocomplete="new-password"></div>
+        <button class="btn btn-solid" id="savePassword" style="margin-bottom:8px">update.sh</button>
+        <button class="btn btn-ghost" onclick="closeModal('passwordModal')">cancel</button>
+    </div>
+</div>
+
 <style>
 .modal-overlay {
     position: fixed; inset: 0; z-index: 100;
@@ -107,8 +126,13 @@ require __DIR__ . '/includes/nav.php';
     margin-bottom: 6px; overflow: hidden;
 }
 .cat-head {
-    display: flex; align-items: center; gap: 8px; padding: 11px 12px; cursor: pointer;
+    display: flex; align-items: center; gap: 10px; padding: 11px 12px; cursor: pointer;
 }
+.cat-img {
+    width: 38px; height: 38px; border-radius: 6px; overflow: hidden; flex-shrink: 0;
+    border: 1px solid var(--border); background: #040a06;
+}
+.cat-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .cat-head .name { flex: 1; font-size: 12.5px; font-weight: 600; }
 .cat-head .tag { font-size: 9px; padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-strong); color: var(--text2); }
 .cat-head .arrow { font-size: 10px; color: var(--text3); transition: transform .2s; }
@@ -122,10 +146,18 @@ require __DIR__ . '/includes/nav.php';
 }
 .dur-row:active { background: var(--panel2); }
 .dur-row .price { color: var(--amber); font-weight: 700; }
+.qr-wrap {
+    background: #040a06; border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 12px; margin-bottom: 12px; text-align: center;
+}
+.qr-wrap img { width: 160px; height: 160px; object-fit: contain; border-radius: 6px; }
 </style>
 
 <script type="module">
-import { requireAuth, backendFetch, toast, fmtDate, esc } from '/assets/js/app.js';
+import {
+    requireAuth, backendFetch, toast, fmtDate, esc,
+    auth, EmailAuthProvider, reauthenticateWithCredential, updatePassword,
+} from '/assets/js/app.js';
 
 let userState = {};
 let catalog = {};
@@ -183,6 +215,7 @@ function renderCatalog() {
     const html = Object.entries(groups).map(([row, items], gi) => `
         <div class="cat-row" id="cat-${gi}">
             <div class="cat-head" onclick="document.getElementById('cat-${gi}').classList.toggle('open')">
+                <div class="cat-img"><img src="${items[0].image || ''}" alt="${esc(row)}" loading="lazy"></div>
                 <span class="name">${esc(row)}</span>
                 <span class="tag">${tagOf(row)}</span>
                 <span class="arrow">▸</span>
@@ -293,13 +326,23 @@ window.__revokeKey = async (key) => {
         toast(e.message, 'error');
     }
 };
-document.getElementById('genKey').onclick = async () => {
+// ---- Change password ----
+document.getElementById('openPassword').onclick = () => openModal('passwordModal');
+document.getElementById('savePassword').onclick = async () => {
+    const curPass = document.getElementById('curPass').value;
+    const newPass = document.getElementById('newPass').value;
+    if (!curPass || !newPass) return toast('Fill both fields', 'error');
+    if (newPass.length < 6) return toast('New password must be at least 6 characters', 'error');
     try {
-        await backendFetch('/api/user/keys', { method: 'POST', body: JSON.stringify({ action: 'generate' }) });
-        await refreshKeys();
-        toast('Key generated', 'success');
+        const cred = EmailAuthProvider.credential(auth.currentUser.email, curPass);
+        await reauthenticateWithCredential(auth.currentUser, cred);
+        await updatePassword(auth.currentUser, newPass);
+        toast('Password updated', 'success');
+        closeModal('passwordModal');
+        document.getElementById('curPass').value = '';
+        document.getElementById('newPass').value = '';
     } catch (e) {
-        toast(e.message, 'error');
+        toast(e.code === 'auth/wrong-password' ? 'Current password is incorrect' : e.message, 'error');
     }
 };
 </script>
